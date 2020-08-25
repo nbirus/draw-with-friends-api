@@ -1,0 +1,12 @@
+{
+  "name": "draw-with-friends-api",
+  "version": "0.0.1",
+  "description": "Draw with Friends API",
+  "dependencies": {
+    "express": "^4.15.2",
+    "socket.io": "^1.7.3"
+  },
+  "scripts": {
+    "start": "node index.js"
+  }
+}
