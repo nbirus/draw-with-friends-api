@@ -4,7 +4,9 @@
   "description": "Draw with Friends API",
   "dependencies": {
     "express": "^4.15.2",
-    "socket.io": "^1.7.3"
+    "lodash": "^4.17.20",
+    "socket.io": "^1.7.3",
+    "uuid": "^8.3.0"
   },
   "scripts": {
     "start": "node index.js"
