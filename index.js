@@ -46,10 +46,11 @@
  * All the libraries that we're using for this app
  */
 const app = require('express')()
-// hook up socket.io and our http server to express.js
 const http = require('http').Server(app)
 const io = require('socket.io')(http)
-const uuid = require('uuid/v1')
+const {
+  v4: uuid
+} = require('uuid');
 const _ = require('lodash')
 
 /**
@@ -62,6 +63,7 @@ const NUM_ROUNDS = 10
  * Instance Variables
  */
 const rooms = {}
+const players = {}
 
 /**
  * Will connect a socket to a specified room
@@ -73,7 +75,6 @@ const joinRoom = (socket, room) => {
   socket.join(room.id, () => {
     // store the room id in the socket for future use
     socket.roomId = room.id
-    console.log(socket.id, 'Joined', room.id)
   })
 }
 
@@ -166,11 +167,22 @@ const beginRound = (socket, id) => {
   }
 
   // the different potential spawning positions on the game map. measured in meters.
-  let positions = [
-    { x: 8, y: 8 },
-    { x: 120, y: 8 },
-    { x: 120, y: 120 },
-    { x: 8, y: 120 },
+  let positions = [{
+      x: 8,
+      y: 8
+    },
+    {
+      x: 120,
+      y: 8
+    },
+    {
+      x: 120,
+      y: 120
+    },
+    {
+      x: 8,
+      y: 120
+    },
   ]
   // Shuffle each position... we're going to use some clever trickery to
   // determine where each player should be spawned. Using lodash for the the shuffle
@@ -238,6 +250,7 @@ const beginRound = (socket, id) => {
   }, 20 * 1000)
 }
 
+
 /**
  * The starting point for a user connecting to our lovely little multiplayer
  * server!
@@ -246,7 +259,26 @@ io.on('connection', (socket) => {
   // give each socket a random identifier so that we can determine who is who when
   // we're sending messages back and forth!
   socket.id = uuid()
-  console.log('a user connected')
+
+
+  socket.on('createPlayer', (player) => {
+    players[player.id] = player
+    socket.broadcast.emit('players', players)
+  })
+
+  socket.on('removePlayer', (id) => {
+    delete players[id]
+    socket.broadcast.emit('players', players)
+  })
+
+  socket.on('getPlayers', () => {
+    socket.emit('players', players)
+  })
+
+  socket.on('getRooms', () => {
+    socket.emit('rooms', rooms)
+  })
+
 
   /**
    * Lets us know that players have joined a room and are waiting in the waiting room.
@@ -350,36 +382,50 @@ io.on('connection', (socket) => {
   socket.on('getRoomNames', (data, callback) => {
     const roomNames = []
     for (const id in rooms) {
-      const { name } = rooms[id]
-      const room = { name, id }
+      const {
+        name
+      } = rooms[id]
+      const room = {
+        name,
+        id
+      }
       roomNames.push(room)
     }
 
-    callback(roomNames)
+    // callback(roomNames)
+    return roomNames
   })
 
   /**
    * Gets fired when a user wants to create a new room.
    */
-  socket.on('createRoom', (roomName, callback) => {
+  socket.on('createRoom', (params) => {
     const room = {
-      id: uuid(), // generate a unique id for the new room, that way we don't need to deal with duplicates.
-      name: roomName,
       sockets: [],
+      id: params.roomId,
+      name: params.name,
+      players: {
+        [params.userid]: params.username
+      },
     }
-    rooms[room.id] = room
-    // have the socket join the room they've just created.
-    joinRoom(socket, room)
-    callback()
+    rooms[params.roomId] = room
+
+    socket.emit('rooms', rooms)
+    socket.broadcast.emit('rooms', rooms)
+    // joinRoom(socket, room)
   })
 
   /**
    * Gets fired when a player has joined a room.
    */
-  socket.on('joinRoom', (roomId, callback) => {
-    const room = rooms[roomId]
-    joinRoom(socket, room)
-    callback()
+  socket.on('joinRoom', (r) => {
+    const room = rooms[r.roomId]
+    room.players[r.userid] = r.username
+    // joinRoom(socket, room)
+
+    // emit rooms to others
+    socket.emit('rooms', rooms)
+    socket.broadcast.emit('rooms', rooms)
   })
 
   /**
