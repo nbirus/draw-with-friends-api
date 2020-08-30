@@ -15,6 +15,7 @@ const defaultRoom = {
 	numberOfRounds: 10,
 	users: {},
 	sockets: [],
+	messages: [],
 }
 const defaultUser = {
 	userid: '',
@@ -31,9 +32,21 @@ io.on('connection', (socket) => {
 	// events
 	function disconnecting() {
 		console.log('client:disconnecting');
-		removeUser(socket.userid)
+
+		// get disconnecting user
+		let user = users[socket.userid]
+
+		// disconnect from room
+		if (user.roomid) {
+			leaveRoom(user.roomid)
+		}
+
+		// remove user
+		delete users[user.userid]
+		brodcastUsers()
 	}
 
+	// user events
 	function setUser(user) {
 		socket.id = user.userid
 		socket.userid = user.userid
@@ -44,71 +57,114 @@ io.on('connection', (socket) => {
 		brodcastUsers()
 	}
 
-	function removeUser(userid) {
-		// remove from user object
-		delete users[userid]
-
-		// remove from rooms
-		Object.keys(rooms).forEach(roomid => {
-
-			let room = rooms[roomid]
-
-			// delete user
-			delete room.users[userid]
-
-			// delete room if no users left
-			if (Object.keys(rooms[roomid].users).length === 0) {
-				delete rooms[roomid]
-			}
-			// set new host if not
-			else if (room.userid === userid) {
-				room.userid = Object.keys(rooms[roomid].users)[0]
-			}
-		})
-
-		brodcastUsers()
-		brodcastRooms()
-	}
-
+	// room events
 	function createRoom(room) {
+		console.log('client:create-room', room.roomid);
 		rooms[room.roomid] = {
 			..._.cloneDeep(defaultRoom),
 			...room,
 		}
-		joinRoom(room.userid)
+	}
+
+	function removeRoom(roomid) {
+		console.log('client:remove-room', roomid);
+		delete rooms[roomid]
+		brodcastRooms()
 	}
 
 	function joinRoom(roomid) {
+		console.log('client:join-room', roomid, socket.userid);
+
+		// get connecting user/room
+		let user = users[socket.userid]
 		let room = rooms[roomid]
 
-		if (room === undefined) {
-			console.log('error:no-room', roomid);
+		if (room === undefined || user === undefined) {
+			console.log('client:join-room-error', roomid);
 			brodcastJoinError()
 			return
 		}
 
-
-		let user = users[socket.userid]
-		users[socket.userid].roomid = roomid
+		// add socket
 		room.sockets.push(socket)
+
+		// add room to user
+		user.roomid = roomid
+
+		// add user
 		room.users[user.userid] = user
 
+		// join room
 		socket.join(roomid, () => {
 			socket.roomid = roomid
 		})
 
-		brodcastRoom(room)
 		brodcastRooms()
+		brodcastRoomJoin(room)
+		brodcastRoomUpdate(room)
 	}
 
-	function removeRoom(roomid) {
-		delete users[roomid]
-		brodcastRooms()
+	function leaveRoom(roomid) {
+		console.log('client:leave-room', roomid, socket.userid);
+
+		// get connecting user/room
+		let user = users[socket.userid]
+		let room = rooms[roomid]
+
+		if (room === undefined || user === undefined) {
+			console.log('client:leave-room-error', roomid, user);
+			return
+		}
+
+		// leave room
+		socket.leave(roomid, () => {
+			socket.roomid = ''
+		})
+
+		// remove roomid from user
+		user.roomid = ''
+
+		// remove room if last user
+		if (Object.keys(room.users).length > 1) {
+
+			// remove socket
+			const index = room.sockets.findIndex(s => s.id === socket.id);
+			if (index > -1) {
+				room.sockets.splice(index, 1);
+			}
+
+			delete room.users[user.userid]
+
+			// replace host if nessesary
+			if (room.userid === user.userid) {
+				room.userid = room.users[Object.keys(room.users)[0]].userid
+			}
+
+			brodcastRooms()
+			brodcastRoomUpdate(room)
+		}
+		// delete user 
+		else {
+			removeRoom(roomid)
+		}
 	}
 
+	// chat
 	function globalChat(message) {
 		messages.push(message)
 		brodcastGlobalMessages()
+	}
+
+	function roomChat(params) {
+		let room = rooms[params.roomid]
+		if (room !== undefined) {
+			room.messages.push({
+				userid: params.userid,
+				username: params.username,
+				message: params.message,
+			})
+			brodcastRoomUpdate(room)
+		}
 	}
 
 	// brodcasts
@@ -118,12 +174,20 @@ io.on('connection', (socket) => {
 	}
 
 	function brodcastRooms() {
+		console.log('brodcast:rooms');
 		socket.emit('update_rooms', formatRooms())
 		socket.broadcast.emit('update_rooms', formatRooms())
 	}
 
-	function brodcastRoom(room) {
+	function brodcastRoomJoin(room) {
 		socket.emit('join_room', formatRoom(room))
+	}
+
+	function brodcastRoomUpdate(room) {
+		console.log('brodcast:room-update');
+		for (const client of room.sockets) {
+			client.emit('update_room', formatRoom(room))
+		}
 	}
 
 	function brodcastJoinError() {
@@ -144,14 +208,15 @@ io.on('connection', (socket) => {
 
 	// register events
 	socket.on('set_user', setUser)
-	socket.on('remove_user', removeUser)
 	socket.on('create_room', createRoom)
 	socket.on('join_room', joinRoom)
+	socket.on('leave_room', leaveRoom)
 	socket.on('remove_room', removeRoom)
 	socket.on('disconnecting', disconnecting)
 
 	// chat events
 	socket.on('global_message', globalChat)
+	socket.on('room_message', roomChat)
 })
 
 
@@ -173,6 +238,8 @@ function formatRooms() {
 }
 
 function formatRoom(room) {
-	delete room['sockets']
-	return room
+	return _.cloneDeep({
+		...room,
+		sockets: []
+	})
 }
