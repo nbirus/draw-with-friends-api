@@ -1,449 +1,178 @@
-// const e = require('express')
-
-// var app = require('express')()
-// var http = require('http').Server(app)
-// var io = require('socket.io')(http)
-// var port = process.env.PORT || 3000
-
-// let lobby = []
-
-// app.get('/', function (req, res) {
-//   res.sendFile(__dirname + '/index.html')
-// })
-
-// http.listen(port, function () {
-//   console.log('listening on *:' + port)
-// })
-
-// // Delete this row if you want to see debug messages
-// io.set('log level', 1)
-
-// // Listen for incoming connections from clients
-// io.sockets.on('connection', function (socket) {
-//   // Start listening for players joining
-//   socket.on('join', function (data) {
-//     let playerIndex = lobby.findIndex((player) => player.id === data.id)
-//     if (playerIndex === -1) {
-//       lobby.push(data)
-//     } else {
-//       lobby[playerIndex].username = data.username
-//     }
-
-//     socket.emit('lobby', lobby)
-//   })
-
-//   // Start listening for mouse move events
-//   socket.on('mousemove', function (data) {
-//     console.log(data)
-//     // This line sends the event (broadcasts it)
-//     // to everyone except the originating client.
-//     socket.broadcast.emit('moving', data)
-//   })
-// })
-
-/**
- *
- * All the libraries that we're using for this app
- */
 const app = require('express')()
 const http = require('http').Server(app)
 const io = require('socket.io')(http)
-const {
-  v4: uuid
-} = require('uuid');
 const _ = require('lodash')
-
-/**
- * Constants
- */
 const PORT = process.env.PORT || 3000
 const NUM_ROUNDS = 10
 
-/**
- * Instance Variables
- */
 const rooms = {}
-const players = {}
-
-/**
- * Will connect a socket to a specified room
- * @param socket A connected socket.io socket
- * @param room An object that represents a room from the `rooms` instance variable object
- */
-const joinRoom = (socket, room) => {
-  room.sockets.push(socket)
-  socket.join(room.id, () => {
-    // store the room id in the socket for future use
-    socket.roomId = room.id
-  })
+const users = {}
+const defaultRoom = {
+	name: '',
+	roomid: '',
+	userid: '',
+	colors: [],
+	numberOfRounds: 10,
+	users: {},
+	sockets: [],
 }
-
-/**
- * Will make the socket leave any rooms that it is a part of
- * @param socket A connected socket.io socket
- */
-const leaveRooms = (socket) => {
-  const roomsToDelete = []
-  for (const id in rooms) {
-    const room = rooms[id]
-    // check to see if the socket is in the current room
-    if (room.sockets.includes(socket)) {
-      socket.leave(id)
-      // remove the socket from the room object
-      room.sockets = room.sockets.filter((item) => item !== socket)
-    }
-    // Prepare to delete any rooms that are now empty
-    if (room.sockets.length == 0) {
-      roomsToDelete.push(room)
-    }
-  }
-
-  // Delete all the empty rooms that we found earlier
-  for (const room of roomsToDelete) {
-    delete rooms[room.id]
-  }
+const defaultUser = {
+	userid: '',
+	username: '',
+	roomid: ''
 }
+const messages = []
 
-/**
- * Will check to see if we have a game winner for the room.
- * @param room An object that represents a room from the `rooms` instance variable object
- * @param sendMessage Whether or not to tell each socket if they've won or lost the game
- * @returns {boolean} true if we've found a winner. false if we haven't found a winner
- */
-const checkScore = (room, sendMessage = false) => {
-  let winner = null
-  for (const client of room.sockets) {
-    if (client.score >= NUM_ROUNDS) {
-      winner = client
-      break
-    }
-  }
-
-  if (winner) {
-    if (sendMessage) {
-      for (const client of room.sockets) {
-        client.emit(
-          'gameOver',
-          client.id === winner.id ? 'You won the game!' : 'You lost the game :('
-        )
-      }
-    }
-
-    return true
-  }
-
-  return false
-}
-
-/**
- * At the start of each round, randomize the players positions, determine if
- * they should be "IT" or not, and increment the score if necessary
- * @param socket A connected socket.io socket
- * @param id The id sent by the client that represents the previous "IT" player.
- * If its null, we won't increment anyone's score
- */
-const beginRound = (socket, id) => {
-  // This is a hack to make sure this function is only being called once during
-  // game play. Basically, the client needs to send us the
-  if (id && socket.id !== id) {
-    return
-  }
-
-  // Get the room
-  const room = rooms[socket.roomId]
-  if (!room) {
-    return
-  }
-
-  // Make sure to cancel the 20 second lose round timer so we make sure we only
-  // have one timer going at any point.
-  if (room.timeout) {
-    clearTimeout(room.timeout)
-  }
-
-  // If we've already found a game winner, we don't need to start a new round.
-  if (checkScore(room)) {
-    return
-  }
-
-  // the different potential spawning positions on the game map. measured in meters.
-  let positions = [{
-      x: 8,
-      y: 8
-    },
-    {
-      x: 120,
-      y: 8
-    },
-    {
-      x: 120,
-      y: 120
-    },
-    {
-      x: 8,
-      y: 120
-    },
-  ]
-  // Shuffle each position... we're going to use some clever trickery to
-  // determine where each player should be spawned. Using lodash for the the shuffle
-  // functionality.
-  positions = _.shuffle(positions)
-
-  // isIt will represent the new socket that will be considered to be "IT"
-  let isIt = null
-  // This is going to be a dictionary that we're going to send to every client.
-  // the keys will represent the socket ID and the values will be another dictionary
-  // that will represent each player.
-  const output = {}
-
-  // We're going to loop through each player in the room.
-  for (const client of room.sockets) {
-    // here is the trickery. We're just going to get the last object in the positions
-    // array to get the position for this player. Now there will be one less choice in
-    // in the positions array.
-    const position = positions.pop()
-    client.x = position.x
-    client.y = position.y
-    // if the player was already it, we don't want to make them it again.
-    if (client.isIt) {
-      // the player won the round! increment their score.
-      client.score = id ? client.score + 1 : client.score
-      client.isIt = false
-    }
-    // we're going to use lodash's handy isEmpty check to see if we have an IT socket already.
-    // if we don't mark the current player as it! mark the as not it just in case.
-    else if (_.isEmpty(isIt)) {
-      client.isIt = true
-      isIt = client
-    } else {
-      client.isIt = false
-    }
-
-    // this is the sub dictionary that represents the current player.
-    output[client.id] = {
-      x: client.x,
-      y: client.y,
-      score: client.score,
-      isIt: client.isIt,
-    }
-  }
-
-  // After all that madness, check if we have a game winner! If we do, then
-  // just return out.
-  if (checkScore(room, true)) {
-    return
-  }
-
-  // Tell all the players to update themselves client side
-  for (const client of room.sockets) {
-    client.emit('checkifit', output)
-  }
-
-  // Start the round over if the player didn't catch anyone. They've lost the round
-  // so decrement their score :(. Note that setTimeout is measured in milliseconds hence
-  // the multipication by 1000
-  room.timeout = setTimeout(() => {
-    if (isIt) {
-      isIt.score = isIt.score - 1
-    }
-    beginRound(socket, null)
-  }, 20 * 1000)
-}
-
-
-/**
- * The starting point for a user connecting to our lovely little multiplayer
- * server!
- */
 io.on('connection', (socket) => {
-  // give each socket a random identifier so that we can determine who is who when
-  // we're sending messages back and forth!
-  socket.id = uuid()
+	console.log('client:connected');
+
+	init()
+
+	// events
+	function disconnecting() {
+		console.log('client:disconnecting');
+		removeUser(socket.userid)
+	}
+
+	function setUser(user) {
+		socket.id = user.userid
+		socket.userid = user.userid
+		users[user.userid] = {
+			..._.cloneDeep(defaultUser),
+			...user,
+		}
+		brodcastUsers()
+	}
+
+	function removeUser(userid) {
+		// remove from user object
+		delete users[userid]
+
+		// remove from rooms
+		Object.keys(rooms).forEach(roomid => {
+
+			let room = rooms[roomid]
+
+			// delete user
+			delete room.users[userid]
+
+			// delete room if no users left
+			if (Object.keys(rooms[roomid].users).length === 0) {
+				delete rooms[roomid]
+			}
+			// set new host if not
+			else if (room.userid === userid) {
+				room.userid = Object.keys(rooms[roomid].users)[0]
+			}
+		})
+
+		brodcastUsers()
+		brodcastRooms()
+	}
+
+	function createRoom(room) {
+		rooms[room.roomid] = {
+			..._.cloneDeep(defaultRoom),
+			...room,
+		}
+		joinRoom(room.userid)
+	}
+
+	function joinRoom(roomid) {
+		let room = rooms[roomid]
+
+		if (room === undefined) {
+			console.log('error:no-room', roomid);
+			brodcastJoinError()
+			return
+		}
 
 
-  socket.on('createPlayer', (player) => {
-    players[player.id] = player
-    socket.broadcast.emit('players', players)
-  })
+		let user = users[socket.userid]
+		users[socket.userid].roomid = roomid
+		room.sockets.push(socket)
+		room.users[user.userid] = user
 
-  socket.on('removePlayer', (id) => {
-    delete players[id]
-    socket.broadcast.emit('players', players)
-  })
+		socket.join(roomid, () => {
+			socket.roomid = roomid
+		})
 
-  socket.on('getPlayers', () => {
-    socket.emit('players', players)
-  })
+		brodcastRoom(room)
+		brodcastRooms()
+	}
 
-  socket.on('getRooms', () => {
-    socket.emit('rooms', rooms)
-  })
+	function removeRoom(roomid) {
+		delete users[roomid]
+		brodcastRooms()
+	}
 
+	function globalChat(message) {
+		messages.push(message)
+		brodcastGlobalMessages()
+	}
 
-  /**
-   * Lets us know that players have joined a room and are waiting in the waiting room.
-   */
-  socket.on('ready', () => {
-    console.log(socket.id, 'is ready!')
-    const room = rooms[socket.roomId]
-    // when we have two players... START THE GAME!
-    if (room.sockets.length == 2) {
-      // tell each player to start the game.
-      for (const client of room.sockets) {
-        client.emit('initGame')
-      }
-    }
-  })
+	// brodcasts
+	function brodcastUsers() {
+		socket.emit('update_users', users)
+		socket.broadcast.emit('update_users', users)
+	}
 
-  /**
-   * The game has started! Give everyone their default values and tell each client
-   * about each player
-   * @param data we don't actually use that so we can ignore it.
-   * @param callback Respond back to the message with information about the game state
-   */
-  socket.on('startGame', (data, callback) => {
-    const room = rooms[socket.roomId]
-    if (!room) {
-      return
-    }
-    const others = []
-    for (const client of room.sockets) {
-      client.x = 0
-      client.y = 0
-      client.score = 0
-      if (client === socket) {
-        continue
-      }
-      others.push({
-        id: client.id,
-        x: client.x,
-        y: client.y,
-        score: client.score,
-        isIt: false,
-      })
-    }
+	function brodcastRooms() {
+		socket.emit('update_rooms', formatRooms())
+		socket.broadcast.emit('update_rooms', formatRooms())
+	}
 
-    // Tell the client who they are and who everyone else is!
-    const ack = {
-      me: {
-        id: socket.id,
-        x: socket.x,
-        y: socket.y,
-        score: socket.score,
-        isIt: false,
-      },
-      others,
-    }
+	function brodcastRoom(room) {
+		socket.emit('join_room', formatRoom(room))
+	}
 
-    callback(ack)
+	function brodcastJoinError() {
+		socket.emit('join_room_error')
+	}
 
-    // Start the game in 5 seconds
-    setTimeout(() => {
-      beginRound(socket, null)
-    }, 5000)
-  })
+	function brodcastGlobalMessages() {
+		socket.emit('global_messages', messages)
+		socket.broadcast.emit('global_messages', messages)
+	}
 
-  /**
-   * Gets fired every time a player has moved! Then forward that message to everyone else!
-   * @param data A JSON string that represents the x and y position of the player that moved. Needs to be parsed!
-   */
-  socket.on('moved', (data) => {
-    data = JSON.parse(data)
-    const room = rooms[socket.roomId]
-    if (!room) {
-      return
-    }
-    socket.x = data.x
-    socket.y = data.y
-    // Tell everyone else about their updated position!
-    for (const client of room.sockets) {
-      if (client == socket) {
-        continue
-      }
-      client.emit(socket.id, {
-        x: socket.x,
-        y: socket.y,
-        score: socket.score,
-        isIt: socket.isIt,
-      })
-    }
-  })
+	// other
+	function init() {
+		socket.emit('update_rooms', formatRooms())
+		socket.emit('update_users', users)
+		socket.emit('global_messages', messages)
+	}
 
-  /**
-   * Gets fired when the players collide! The round is over!
-   */
-  socket.on('collide', (id) => {
-    beginRound(socket, id)
-  })
+	// register events
+	socket.on('set_user', setUser)
+	socket.on('remove_user', removeUser)
+	socket.on('create_room', createRoom)
+	socket.on('join_room', joinRoom)
+	socket.on('remove_room', removeRoom)
+	socket.on('disconnecting', disconnecting)
 
-  /**
-   * Gets fired when someone wants to get the list of rooms. respond with the list of room names.
-   */
-  socket.on('getRoomNames', (data, callback) => {
-    const roomNames = []
-    for (const id in rooms) {
-      const {
-        name
-      } = rooms[id]
-      const room = {
-        name,
-        id
-      }
-      roomNames.push(room)
-    }
-
-    // callback(roomNames)
-    return roomNames
-  })
-
-  /**
-   * Gets fired when a user wants to create a new room.
-   */
-  socket.on('createRoom', (params) => {
-    const room = {
-      sockets: [],
-      id: params.roomId,
-      name: params.name,
-      players: {
-        [params.userid]: params.username
-      },
-    }
-    rooms[params.roomId] = room
-
-    socket.emit('rooms', rooms)
-    socket.broadcast.emit('rooms', rooms)
-    // joinRoom(socket, room)
-  })
-
-  /**
-   * Gets fired when a player has joined a room.
-   */
-  socket.on('joinRoom', (r) => {
-    const room = rooms[r.roomId]
-    room.players[r.userid] = r.username
-    // joinRoom(socket, room)
-
-    // emit rooms to others
-    socket.emit('rooms', rooms)
-    socket.broadcast.emit('rooms', rooms)
-  })
-
-  /**
-   * Gets fired when a player leaves a room.
-   */
-  socket.on('leaveRoom', () => {
-    leaveRooms(socket)
-  })
-
-  /**
-   * Gets fired when a player disconnects from the server.
-   */
-  socket.on('disconnect', () => {
-    console.log('user disconnected')
-    leaveRooms(socket)
-  })
+	// chat events
+	socket.on('global_message', globalChat)
 })
 
+
+// start server
 http.listen(PORT, function () {
-  console.log(`listening on *:${PORT}`)
+	console.log(`listening on *:${PORT}`)
 })
+
+// helpers
+function formatRooms() {
+	let returnRooms = {}
+	let roomids = Object.keys(_.cloneDeep(rooms))
+
+	roomids.forEach(roomid => {
+		returnRooms[roomid] = formatRoom(_.cloneDeep(rooms[roomid]))
+	})
+
+	return returnRooms
+}
+
+function formatRoom(room) {
+	delete room['sockets']
+	return room
+}
