@@ -2,20 +2,27 @@ const app = require('express')()
 const http = require('http').Server(app)
 const io = require('socket.io')(http)
 const _ = require('lodash')
+const game = require('./game')
 const PORT = process.env.PORT || 3000
-const NUM_ROUNDS = 10
+const DISABLE_READY = true
 
 const rooms = {}
 const users = {}
 const defaultRoom = {
+	game: game,
 	name: '',
 	roomid: '',
 	userid: '',
 	colors: [],
-	numberOfRounds: 10,
+	active: false,
 	users: {},
 	sockets: [],
 	messages: [],
+	guesses: [],
+	settings: {
+		numberOfRounds: 5,
+		roundTimerLength: 30,
+	},
 }
 const defaultUser = {
 	userid: '',
@@ -92,7 +99,12 @@ io.on('connection', (socket) => {
 		user.roomid = roomid
 
 		// add user
-		room.users[user.userid] = user
+		room.users[user.userid] = {
+			...user,
+			ready: false,
+			match: false,
+			score: 0,
+		}
 
 		// join room
 		socket.join(roomid, () => {
@@ -149,20 +161,79 @@ io.on('connection', (socket) => {
 		}
 	}
 
+	function setReady(flag) {
+		let room = rooms[socket.roomid]
+		let userValues = Object.values(room.users)
+
+		// set to flag on user
+		room.users[socket.userid].ready = flag
+
+		// if all 4 players are ready, start game
+		if (userValues.length === 4 && userValues.every(r => r.ready) || DISABLE_READY) {
+			startGame(room)
+		}
+
+		brodcastRooms()
+		brodcastRoomUpdate(room)
+	}
+
 	// chat
 	function globalChat(message) {
 		messages.push(message)
 		brodcastGlobalMessages()
 	}
 
-	function roomChat(params) {
-		let room = rooms[params.roomid]
+	function roomChat(data) {
+		let room = rooms[data.roomid]
 		if (room !== undefined) {
 			room.messages.push({
-				userid: params.userid,
-				username: params.username,
-				message: params.message,
+				userid: data.userid,
+				username: data.username,
+				message: data.message,
 			})
+			brodcastRoomUpdate(room)
+		}
+	}
+
+	// game
+	function startGame(room) {
+		room.game = new room.game(room, endGame)
+		room.active = true
+		brodcastStartGame(room)
+	}
+
+	function endGame() {
+		console.log('END GAME');
+	}
+
+	function mouseMove(data) {
+		let room = rooms[data.roomid]
+		if (room !== undefined) {
+			for (const client of room.sockets) {
+				client.emit('moving', data)
+			}
+		}
+	}
+
+	function guess(data) {
+		let room = rooms[data.roomid]
+		if (room !== undefined) {
+
+			// set guesses on room object
+			room.guesses.push({
+				userid: data.userid,
+				username: data.username,
+				guess: data.guess,
+			})
+
+			// send guess to game obj
+			room.game.guess(data, doesMatch => {
+				room.users[socket.userid].match = doesMatch
+				if (doesMatch) {
+					room.users[socket.userid].score++
+				}
+			})
+
 			brodcastRoomUpdate(room)
 		}
 	}
@@ -199,6 +270,12 @@ io.on('connection', (socket) => {
 		socket.broadcast.emit('global_messages', messages)
 	}
 
+	function brodcastStartGame(room) {
+		for (const client of room.sockets) {
+			client.emit('start_game')
+		}
+	}
+
 	// other
 	function init() {
 		socket.emit('update_rooms', formatRooms())
@@ -217,6 +294,11 @@ io.on('connection', (socket) => {
 	// chat events
 	socket.on('global_message', globalChat)
 	socket.on('room_message', roomChat)
+
+	// game events
+	socket.on('ready', setReady)
+	socket.on('mousemove', mouseMove)
+	socket.on('guess', guess)
 })
 
 
@@ -240,6 +322,7 @@ function formatRooms() {
 function formatRoom(room) {
 	return _.cloneDeep({
 		...room,
+		game: null,
 		sockets: []
 	})
 }
