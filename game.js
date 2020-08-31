@@ -19,12 +19,12 @@ const game = function (room, endGame) {
 		// brodcast loop start
 		brodcastEvent({
 			event: 'loop_start',
-			turn: getUserid(currentTurnIndex),
+			turn: getUser(currentTurnIndex),
 			roundWord,
 		})
 
-		// wait 5 seconds before starting next round
-		startTimer(5, startRound)
+		// wait 3 seconds before starting next round
+		startTimer(3, startRound)
 	}
 
 	// actions
@@ -54,8 +54,8 @@ const game = function (room, endGame) {
 		if (roundCount === -1) {
 			endGame()
 		} else {
-			// allow 5 seconds of endtime
-			startTimer(5, loop)
+			// allow 3 seconds of endtime
+			startTimer(3, loop)
 		}
 	}
 
@@ -91,9 +91,9 @@ const game = function (room, endGame) {
 		timerCallback = null
 	}
 
-	function getUserid(index) {
+	function getUser(index) {
 		let user = Object.values(room.users)[index]
-		return user ? user.userid : 'invalid'
+		return user ? user : {}
 	}
 
 	function incrementTurnIndex() {

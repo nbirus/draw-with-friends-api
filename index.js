@@ -21,7 +21,7 @@ const defaultRoom = {
 	guesses: [],
 	settings: {
 		numberOfRounds: 5,
-		roundTimerLength: 30,
+		roundTimerLength: 10,
 	},
 }
 const defaultUser = {
