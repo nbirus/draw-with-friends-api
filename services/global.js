@@ -10,9 +10,9 @@ const rooms = {}
 // socket events
 io.on('connection', function (socket) {
   // init
-  brodcastUsers()
-  brodcastRooms()
-  brodcastGlobalMessages()
+  broadcastUsers()
+  broadcastRooms()
+  broadcastGlobalMessages()
 
   // events
   socket.on('global_message', addMessage)
@@ -22,37 +22,40 @@ io.on('connection', function (socket) {
 function addUser(user) {
   log('add-user')
   users[user.userid] = user
-  brodcastUsers()
+  broadcastUsers()
 }
 function removeUser(userid) {
   delete users[userid]
-  brodcastUsers()
+  broadcastUsers()
 }
 function addRoom(room) {
   log('add-room')
   rooms[room.roomid] = room
-  brodcastRooms()
+  broadcastRooms()
 }
 function removeRoom(roomid) {
   delete rooms[roomid]
-  brodcastRooms()
+  broadcastRooms()
 }
-function addMessage(message) {
-  messages.push(message)
-  brodcastGlobalMessages()
+function addMessage(data) {
+  messages.push({
+    user: users[data.userid],
+    message: data.message,
+  })
+  broadcastGlobalMessages()
 }
 
-// brodcasts
-function brodcastUsers() {
-  log('brodcast-users')
+// broadcasts
+function broadcastUsers() {
+  log('broadcast-users')
   io.emit('update_users', users)
 }
-function brodcastRooms() {
-  log('brodcast-rooms')
+function broadcastRooms() {
+  log('broadcast-rooms')
   io.emit('update_rooms', formatRooms(rooms))
 }
-function brodcastGlobalMessages() {
-  log('brodcast-messages')
+function broadcastGlobalMessages() {
+  log('broadcast-messages')
   io.emit('global_messages', messages)
 }
 
@@ -87,7 +90,7 @@ module.exports = {
   addRoom,
   removeRoom,
   addMessage,
-  brodcastRooms,
+  broadcastRooms,
   rooms,
   users,
 }

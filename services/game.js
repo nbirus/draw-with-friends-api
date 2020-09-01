@@ -12,11 +12,16 @@ io.on('connection', (socket) => {
 // actions
 function startGame(room) {
   log('start', room.roomid)
-  room.game = room.game(room, () => endGame(room))
-  brodcastStartGame(room)
+
+  // wait for users to redirect to game page
+  setTimeout(() => {
+    room.game = room.game(room, () => endGame(room))
+  }, 1000)
+  broadcastStartGame(room)
 }
 function endGame(room) {
   log('end', room.roomid)
+  brodcastEndGame(room)
 }
 
 // event handlers
@@ -31,28 +36,38 @@ function mouseMove(data) {
 function guess(data) {
   log('guess', data.roomid, data.userid)
   let room = global.rooms[data.roomid]
+  let user = room.users[data.userid]
   if (room !== undefined) {
-    // set guesses on room object
-    room.guesses.push({
-      userid: data.userid,
-      username: data.username,
+    user.guesses.push({
       guess: data.guess,
     })
+
     // send guess to game obj
     room.game.guess(data, (doesMatch) => {
-      room.users[socket.userid].match = doesMatch
+      user.match = doesMatch
       if (doesMatch) {
-        room.users[socket.userid].score++
+        user.score++
       }
     })
-    brodcastRoomUpdate(room)
+    broadcastRoomUpdate(room)
   }
 }
 
-// brodcasts
-function brodcastStartGame(room) {
+// broadcasts
+function broadcastStartGame(room) {
   for (const client of room.sockets) {
-    client.emit('room_ready')
+    client.emit('game_start')
+  }
+}
+function brodcastEndGame(room) {
+  for (const client of room.sockets) {
+    client.emit('game_over')
+  }
+}
+function broadcastRoomUpdate(room) {
+  log('broadcast-room-update', room.roomid)
+  for (const client of room.sockets) {
+    client.emit('update_room', formatRoom(room))
   }
 }
 
@@ -65,6 +80,13 @@ function log(message, roomid, userid) {
       console.log(`game:${message}`, roomid)
     }
   }
+}
+function formatRoom(room) {
+  return _.cloneDeep({
+    ...room,
+    game: null,
+    sockets: [],
+  })
 }
 
 module.exports = {

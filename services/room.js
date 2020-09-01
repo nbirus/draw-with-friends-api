@@ -3,7 +3,7 @@ const global = require('./global')
 const game = require('./game')
 const gameLoop = require('../game-loop')
 const _ = require('lodash')
-const LOG = true
+const LOG = false
 const DISABLE_READY = true
 
 // vars
@@ -17,13 +17,10 @@ const defaultRoom = {
   users: {},
   sockets: [],
   messages: [],
-  guesses: [],
-  settings: {
-    numberOfRounds: 5,
-    roundTimerLength: 10,
-  },
+  gameState: {},
 }
 const defaultRoomUser = {
+  guesses: [],
   connected: true,
   ready: false,
   match: false,
@@ -36,6 +33,7 @@ io.on('connection', (socket) => {
   socket.on('remove_room', (roomid) => removeRoom(roomid))
   socket.on('join_room', (roomid) => joinRoom(roomid, socket))
   socket.on('leave_room', (roomid) => leaveRoom(roomid, socket))
+  socket.on('room_message', (data) => roomMessage(data, socket))
   socket.on('ready', (flag) => setReady(flag, socket))
 
   // remove from room if disconnected
@@ -67,7 +65,7 @@ function joinRoom(roomid, socket) {
 
   if (room === undefined || user === undefined) {
     log('join-room-error', roomid, socket.userid)
-    brodcastJoinError(socket)
+    broadcastJoinError(socket)
     return
   }
 
@@ -92,9 +90,9 @@ function joinRoom(roomid, socket) {
     socket.roomid = roomid
   })
 
-  brodcastRoomJoin(room, socket)
-  brodcastRoomUpdate(room)
-  global.brodcastRooms()
+  broadcastRoomJoin(room, socket)
+  broadcastRoomUpdate(room)
+  global.broadcastRooms()
 }
 function leaveRoom(roomid, socket) {
   log('leave-room', roomid, socket.userid)
@@ -142,8 +140,8 @@ function leaveRoom(roomid, socket) {
     }
   }
 
-  brodcastRoomUpdate(room)
-  global.brodcastRooms()
+  broadcastRoomUpdate(room)
+  global.broadcastRooms()
 }
 function setReady(flag, socket) {
   log('user-ready', socket.roomid, socket.userid)
@@ -162,20 +160,30 @@ function setReady(flag, socket) {
     game.startGame(room)
   }
 
-  brodcastRoomUpdate(room)
-  global.brodcastRooms()
+  broadcastRoomUpdate(room)
+  global.broadcastRooms()
+}
+function roomMessage(data, socket) {
+  let room = global.rooms[socket.roomid]
+  if (data.message) {
+    room.messages.push({
+      user: global.users[data.userid],
+      message: data.message,
+    })
+  }
+  broadcastRoomUpdate(room)
 }
 
-// brodcasts
-function brodcastRoomJoin(room, socket) {
-  log('brodcast-room-join', room.roomid, socket.userid)
+// broadcasts
+function broadcastRoomJoin(room, socket) {
+  log('broadcast-room-join', room.roomid, socket.userid)
   socket.emit('join_room', formatRoom(room))
 }
-function brodcastJoinError(socket) {
+function broadcastJoinError(socket) {
   socket.emit('join_room_error')
 }
-function brodcastRoomUpdate(room) {
-  log('brodcast-room-update', room.roomid)
+function broadcastRoomUpdate(room) {
+  log('broadcast-room-update', room.roomid)
   for (const client of room.sockets) {
     client.emit('update_room', formatRoom(room))
   }
@@ -200,4 +208,6 @@ function formatRoom(room) {
 }
 
 // exports
-module.exports = {}
+module.exports = {
+  broadcastRoomUpdate,
+}
