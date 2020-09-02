@@ -19,6 +19,7 @@ function startGame(room) {
   }, 1000)
   broadcastStartGame(room)
 }
+
 function endGame(room) {
   log('end', room.roomid)
   brodcastEndGame(room)
@@ -33,6 +34,7 @@ function mouseMove(data) {
     }
   }
 }
+
 function guess(data) {
   log('guess', data.roomid, data.userid)
   let room = global.rooms[data.roomid]
@@ -59,11 +61,13 @@ function broadcastStartGame(room) {
     client.emit('game_start')
   }
 }
+
 function brodcastEndGame(room) {
   for (const client of room.sockets) {
     client.emit('game_over')
   }
 }
+
 function broadcastRoomUpdate(room) {
   log('broadcast-room-update', room.roomid)
   for (const client of room.sockets) {
@@ -81,6 +85,7 @@ function log(message, roomid, userid) {
     }
   }
 }
+
 function formatRoom(room) {
   return _.cloneDeep({
     ...room,

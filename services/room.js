@@ -4,7 +4,7 @@ const game = require('./game')
 const gameLoop = require('../game-loop')
 const _ = require('lodash')
 const LOG = false
-const DISABLE_READY = true
+const DISABLE_READY = false
 
 // vars
 const defaultRoom = {
@@ -52,10 +52,12 @@ function createRoom(room, socket) {
     ...room,
   })
 }
+
 function removeRoom(roomid) {
   log('remove-room', roomid)
   global.removeRoom(roomid)
 }
+
 function joinRoom(roomid, socket) {
   log('join-room', roomid, socket.userid)
 
@@ -94,6 +96,7 @@ function joinRoom(roomid, socket) {
   broadcastRoomUpdate(room)
   global.broadcastRooms()
 }
+
 function leaveRoom(roomid, socket) {
   log('leave-room', roomid, socket.userid)
 
@@ -143,9 +146,17 @@ function leaveRoom(roomid, socket) {
   broadcastRoomUpdate(room)
   global.broadcastRooms()
 }
+
 function setReady(flag, socket) {
   log('user-ready', socket.roomid, socket.userid)
+
   let room = global.rooms[socket.roomid]
+
+  if (room === undefined) {
+    log('user-ready-error', socket.roomid, socket.userid)
+    return
+  }
+
   let userValues = Object.values(room.users)
 
   // set to flag on user
@@ -153,7 +164,7 @@ function setReady(flag, socket) {
 
   // if all 4 players are ready, start game
   if (
-    (userValues.length === 4 && userValues.every((r) => r.ready)) ||
+    (userValues.length > 1 && userValues.every((r) => r.ready)) ||
     DISABLE_READY
   ) {
     room.active = true
@@ -163,6 +174,7 @@ function setReady(flag, socket) {
   broadcastRoomUpdate(room)
   global.broadcastRooms()
 }
+
 function roomMessage(data, socket) {
   let room = global.rooms[socket.roomid]
   if (data.message) {
@@ -179,9 +191,11 @@ function broadcastRoomJoin(room, socket) {
   log('broadcast-room-join', room.roomid, socket.userid)
   socket.emit('join_room', formatRoom(room))
 }
+
 function broadcastJoinError(socket) {
   socket.emit('join_room_error')
 }
+
 function broadcastRoomUpdate(room) {
   log('broadcast-room-update', room.roomid)
   for (const client of room.sockets) {
@@ -199,6 +213,7 @@ function log(message, roomid, userid) {
     }
   }
 }
+
 function formatRoom(room) {
   return _.cloneDeep({
     ...room,
