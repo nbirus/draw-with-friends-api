@@ -10,7 +10,7 @@
   },
   "scripts": {
     "start": "node index.js",
-    "watch": "npx nodejs-hot-reload entry=./index.js outDir=./build"
+    "serve": "npx nodejs-hot-reload entry=./index.js outDir=./build"
   },
   "devDependencies": {
     "nodejs-hot-reload": "^0.1.2"

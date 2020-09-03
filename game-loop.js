@@ -14,15 +14,9 @@ const defaultGameState = {
   roundEnd: 5,
   turn: 1,
   turnEnd: 2,
-  turnLength: 5,
+  turnLength: 10,
   turnUser: {},
 }
-
-// game starts
-// 5 rounds
-// user 1 draws
-// user 2 draws
-// 4 rounds
 
 const game = function (room, endGame) {
 
@@ -80,23 +74,38 @@ const game = function (room, endGame) {
   // loop
   function loopTurns() {
     if (room.gameState.turn <= room.gameState.turnEnd) {
-      turnStart()
+      preTurnStart()
     } else {
       roundEnd()
     }
   }
 
+
   // turn
-  function turnStart() {
-    log('start-turn')
+  function preTurnStart() {
+    log('pre-turn')
 
     // update vars
-    room.gameState.event = 'turn-start'
+    room.gameState.event = 'turn-pre'
     room.gameState.word = getRandomWord()
     room.gameState.turnUser = getUserAtIndex(room.gameState.turn, room)
 
     // reset all mactches
     resetRoomMatches(room)
+
+    // end turn after turn length
+    startTimer(2, turnStart)
+
+    // broadcast update
+    broadcastGameUpdate()
+
+  }
+
+  function turnStart() {
+    log('start-turn')
+
+    // set event
+    room.gameState.event = 'turn-start'
 
     // end turn after turn length
     startTimer(room.gameState.turnLength, turnEnd)
@@ -114,6 +123,7 @@ const game = function (room, endGame) {
     // loop back
     startTimer(3, () => {
       room.gameState.turn++
+      clearBoard()
       loopTurns()
     })
 
@@ -144,11 +154,16 @@ const game = function (room, endGame) {
     }
   }
 
+  function clearBoard() {
+    for (const client of room.sockets) {
+      client.emit('clear_board')
+    }
+  }
 
   // helpers
   function startTimer(timerLength, cb) {
     // set timer length
-    room.gameState.timer = timerLength
+    room.gameState.timer = timerLength - 2
 
     // set timer interval
     timerInterval = setInterval(() => {
@@ -186,6 +201,7 @@ const game = function (room, endGame) {
     guess,
   }
 }
+
 
 module.exports = game
 
