@@ -96,4 +96,5 @@ function formatRoom(room) {
 
 module.exports = {
   startGame,
+  broadcastRoomUpdate,
 }
