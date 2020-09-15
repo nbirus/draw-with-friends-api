@@ -57,6 +57,7 @@ function createRoom(room, socket) {
 
 function removeRoom(roomid) {
   log('remove-room', roomid)
+  game.endGame(global.rooms[roomid])
   global.removeRoom(roomid)
 }
 
@@ -143,8 +144,15 @@ function leaveRoom(roomid, socket) {
   let roomUsersLength = Object.keys(room.users).length
   let isHost = room.userid === user.userid
 
+  // if the game is inactive, remove the user completely
+  if (!room.active) {
+    delete room.users[user.userid]
+  } else {
+    room.users[user.userid].connected = false
+  }
+
   // if there is only one user in the room, delete the room
-  if (roomUsersLength === 1) {
+  if (roomUsersLength === 1 || Object.values(room.users).every(u => !u.connected)) {
     removeRoom(roomid)
   } else {
     // remove socket
@@ -158,12 +166,7 @@ function leaveRoom(roomid, socket) {
       room.userid = room.users[Object.keys(room.users)[0]].userid
     }
 
-    // if the game is inactive, remove the user completely
-    if (!room.active) {
-      delete room.users[user.userid]
-    } else {
-      room.users[user.userid].connected = false
-    }
+
   }
 
   broadcastRoomUpdate(room)
@@ -207,7 +210,6 @@ function setReady(flag, socket) {
   ) {
     room.active = true
     startCountDown(game, room, socket)
-    // game.startGame(room)
   }
 
   broadcastRoomUpdate(room)

@@ -7,6 +7,7 @@ let timerInterval = null
 
 // vars
 const defaultGameState = {
+  started: false,
   event: '',
   timer: 0,
   word: '',
@@ -18,7 +19,14 @@ const defaultGameState = {
   turnUser: {},
 }
 
+
 const game = function (room, endGame) {
+
+  function gameStop() {
+    clearTimer()
+    room.gameState = _.cloneDeep(defaultGameState)
+    broadcastGameUpdate()
+  }
 
   function gameStart() {
     log('start')
@@ -26,6 +34,7 @@ const game = function (room, endGame) {
     // init game state
     room.gameState = _.cloneDeep(defaultGameState)
     room.gameState.turnEnd = Object.keys(room.users).length
+    room.gameState.started = true
 
     loopRounds()
   }
@@ -79,7 +88,6 @@ const game = function (room, endGame) {
       roundEnd()
     }
   }
-
 
   // turn
   function preTurnStart() {
@@ -182,8 +190,10 @@ const game = function (room, endGame) {
   }
 
   function clearTimer() {
-    clearInterval(timerInterval)
-    timerInterval = null
+    if (timerInterval !== null) {
+      clearInterval(timerInterval)
+      timerInterval = null
+    }
   }
 
   function resetRoomMatches() {
@@ -199,6 +209,7 @@ const game = function (room, endGame) {
   // expose functions
   return {
     guess,
+    gameStop,
   }
 }
 

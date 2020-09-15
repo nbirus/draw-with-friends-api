@@ -24,19 +24,23 @@ function addUser(user) {
   users[user.userid] = user
   broadcastUsers()
 }
+
 function removeUser(userid) {
   delete users[userid]
   broadcastUsers()
 }
+
 function addRoom(room) {
   log('add-room')
   rooms[room.roomid] = room
   broadcastRooms()
 }
+
 function removeRoom(roomid) {
   delete rooms[roomid]
   broadcastRooms()
 }
+
 function addMessage(data) {
   messages.push({
     user: users[data.userid],
@@ -50,10 +54,12 @@ function broadcastUsers() {
   log('broadcast-users')
   io.emit('update_users', users)
 }
+
 function broadcastRooms() {
   log('broadcast-rooms')
   io.emit('update_rooms', formatRooms(rooms))
 }
+
 function broadcastGlobalMessages() {
   log('broadcast-messages')
   io.emit('global_messages', messages)
@@ -65,6 +71,7 @@ function log(message) {
     console.log(`global:${message}`)
   }
 }
+
 function formatRooms() {
   let returnRooms = {}
   let roomids = Object.keys(_.cloneDeep(rooms))
@@ -75,6 +82,7 @@ function formatRooms() {
 
   return returnRooms
 }
+
 function formatRoom(room) {
   return _.cloneDeep({
     ...room,

@@ -17,11 +17,14 @@ function startGame(room) {
   setTimeout(() => {
     room.game = room.game(room, () => endGame(room))
   }, 1000)
+
   broadcastStartGame(room)
 }
 
 function endGame(room) {
   log('end', room.roomid)
+  room.game.gameStop()
+  room.game = null
   brodcastEndGame(room)
 }
 
@@ -96,5 +99,6 @@ function formatRoom(room) {
 
 module.exports = {
   startGame,
+  endGame,
   broadcastRoomUpdate,
 }
