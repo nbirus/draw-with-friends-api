@@ -23,7 +23,7 @@ function startGame(room) {
 
 function endGame(room) {
   log('end', room.roomid)
-  if (room.active) {
+  if (room.active && room.game !== null) {
     room.game.gameStop()
     room.game = null
     brodcastEndGame(room)

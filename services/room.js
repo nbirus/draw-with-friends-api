@@ -24,6 +24,7 @@ const defaultRoomUser = {
   connected: true,
   ready: false,
   match: false,
+  typing: false,
   color: '',
   score: 0,
 }
@@ -36,6 +37,7 @@ io.on('connection', (socket) => {
   socket.on('leave_room', (roomid) => leaveRoom(roomid, socket))
   socket.on('room_message', (data) => roomMessage(data, socket))
   socket.on('ready', (flag) => setReady(flag, socket))
+  socket.on('typing', (flag) => setTyping(flag, socket))
   socket.on('color', (color) => setColor(color, socket))
 
   // remove from room if disconnected
@@ -168,6 +170,21 @@ function leaveRoom(roomid, socket) {
 
 
   }
+
+  broadcastRoomUpdate(room)
+  global.broadcastRooms()
+}
+
+function setTyping(flag, socket) {
+  let room = global.rooms[socket.roomid]
+  let user = room.users[socket.userid]
+
+  if (room === undefined || user === undefined) {
+    log('user-typing-error', socket.roomid, socket.userid)
+    return
+  }
+
+  user.typing = flag
 
   broadcastRoomUpdate(room)
   global.broadcastRooms()
