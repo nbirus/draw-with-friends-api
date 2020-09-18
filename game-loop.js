@@ -15,7 +15,7 @@ const defaultGameState = {
   roundEnd: 5,
   turn: 1,
   turnEnd: 2,
-  turnLength: 10,
+  turnLength: 32,
   turnUser: {},
 }
 
@@ -61,8 +61,8 @@ const game = function (room, endGame) {
     // reset vars
     room.gameState.turn = 1
 
-    // each user takes a turn after 3 second delay
-    startTimer(3, loopTurns)
+    // round end each user takes a turn after 10 second delay
+    startTimer(12, loopTurns)
 
     // broadcast update
     broadcastGameUpdate()
@@ -102,7 +102,7 @@ const game = function (room, endGame) {
     resetRoomMatches(room)
 
     // end turn after turn length
-    startTimer(2, turnStart)
+    startTimer(7, turnStart)
 
     // broadcast update
     broadcastGameUpdate()
