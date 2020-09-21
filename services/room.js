@@ -177,13 +177,13 @@ function leaveRoom(roomid, socket) {
 
 function setTyping(flag, socket) {
   let room = global.rooms[socket.roomid]
-  let user = room.users[socket.userid]
-
-  if (room === undefined || user === undefined) {
+  
+  if (room === undefined) {
     log('user-typing-error', socket.roomid, socket.userid)
     return
   }
 
+  let user = room.users[socket.userid]
   user.typing = flag
 
   broadcastRoomUpdate(room)
